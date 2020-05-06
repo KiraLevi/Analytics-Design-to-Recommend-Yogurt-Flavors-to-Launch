@@ -1,0 +1,197 @@
+---
+title: "Yogurt Project Team8"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## SQL Code ################################################################################################
+use retailer1;
+show tables;
+
+describe hshldDemograph;
+describe itemsAttributes;
+describe randItemSales;
+describe storeItemSales;
+describe survItemSales;
+
+select * from hshldDemograph;
+select * from itemsAttributes;
+select * from randItemSales;
+select * from storeItemSales;
+select * from survItemSales;
+## #########################################################################################################
+
+## Load Data
+```{r}
+dir = "~/Desktop/GBA424 Analytics Design and Applications/Case2 Yogurt Flavors Case/Data"
+setwd(dir)
+library(ggplot2)
+hshldDemograph <- read.csv("hshldDemograph.csv")
+Demograph <- read.csv('hshldDemograph.csv')
+Attributes <- read.csv('itemsAttributes.csv')
+randItemSales <- read.csv('randItemSales.csv')
+storeItemSales <- read.csv('storeItemSales.csv')
+survItemSales <- read.csv('survItemSales.csv')
+survQuestions <- read.csv('survQuestions.csv')
+survResponses <- read.csv('survResponses.csv')
+```
+
+## Delete bad responses 
+```{r}
+### Get rid of all the bad responses from survey 
+survResponses$V8 <- as.character(survResponses$V8)
+survResponses$V9 <- as.character(survResponses$V9)
+survResponses$difftime <- difftime(survResponses$V9, survResponses$V8, units = "mins")
+mean(survResponses$difftime) 
+### the average time customers took to finish the survey is about 28 mins, so we consider survery finished by >60 as bad responses
+survResponses <- survResponses[survResponses$difftime <= 60, ]
+### get rid of all the responses that are not finished
+survResponses <- survResponses[survResponses$V10 == 1, ]
+### get rid of all the responses finished before May.15, 2011
+survResponses$Date <- as.Date(substring(survResponses$V8,1,10))
+survResponses <- survResponses[-c(seq(1,11,by = 1)),]
+### get rid of the response with incomplete Q12
+test <- survResponses[,c(seq(15,37, by = 1))]
+test <- test[-which(apply(test,1,function(x) all(is.na(x)))),]
+test <- test[complete.cases(test),]
+```
+
+## 1) Describe the percentage of sales of existing flavors in the Greek yogurt category (all brands)
+```{r}
+############################################################################################################
+## Outpt for Slide page3 ###################################################################################
+############################################################################################################
+
+df <- merge(Attributes,storeItemSales,by.x = "Item.Num", by.y = "Item.Num")
+df1 <- df[df$Class=='GREEK',]
+salesGreek <- aggregate(x=df1$Sales,by=list(df1$Flavor1),FUN = sum)
+salesGreek$Percentage <- salesGreek$x/sum(salesGreek$x)
+colnames(salesGreek)[1] <- 'Flavors'
+colnames(salesGreek)[2] <- 'Sales'
+write.csv(salesGreek,'salesGreek.csv') #export for visulization in Tableau
+
+```
+
+## 2) Describe the percentage of sales of existing yogurt flavors outside of Greek yogurt (regular class of yogurt)
+```{r}
+############################################################################################################
+## Output for Slide page4 ##################################################################################
+############################################################################################################
+
+df2 <- df[df$Class!='GREEK',]
+salesRegular <- aggregate(x=df2$Sales,by=list(df2$Flavor1),FUN = sum)
+salesRegular$Percentage <- salesRegular$x/sum(salesRegular$x)
+colnames(salesRegular)[1] <- 'Flavors'
+colnames(salesRegular)[2] <- 'Sales'
+write.csv(salesRegular,'salesRegular.csv') #export for visulization in Tableau
+```
+
+## 3) Describe survey respondents’ preferences for Greek yogurt flavors
+```{r}
+############################################################################################################
+## Output for Slide page5 ##################################################################################
+############################################################################################################
+
+flavors <-c('almond','banana','blackcherry','blueberry', 'caramel', 'chai','chocolate','cinnamon',
+            'coconut','honey', 'key-lime pie', 'lemon', 'mango', 'maple', 'peach','pineapple',
+            'plain', 'pomegranate', 'raspberry', 'strawberry','strawberry-banana', 'vanilla',
+            'vanilla-banana')
+flavorpref0 <- t(as.data.frame(as.list(apply(test,2,function(x) sum(x==0)))))
+flavorpref1 <- t(as.data.frame(as.list(apply(test,2,function(x) sum(x==1)))))
+flavorpref2 <- t(as.data.frame(as.list(apply(test,2,function(x) sum(x==2)))))
+
+flavorspref = as.data.frame(cbind(flavorpref0, flavorpref1, flavorpref2))
+colnames(flavorspref) = c("0", "1","2")
+row.names(flavorspref) = flavors
+
+flavorspref$Percent0 = flavorspref$`0`/577
+flavorspref$Percent1 = flavorspref$`1`/577
+flavorspref$Percent2 = flavorspref$`2`/577
+write.csv(flavorspref,'flavorspref.csv') #export for visulization in Tableau
+
+```
+
+## 4) Use TURF analysis to decide which flavor to launch next.(Not applicable aferter checking the result, so switched to another way.)
+```{r}
+############################################################################################################
+## Result Mentioned is Slide page1, not applicable after checking ##########################################
+############################################################################################################
+
+df4 <- as.data.frame(test==0)
+df4 <- as.data.frame(apply(df4,2,as.numeric))
+colnames(df4)<-flavors
+
+## TURF Analysis functions ##
+measReach = function(data){
+  if(is.null(dim(data))){ #if data is a vector
+    ret = sum(data>0,na.rm=TRUE)/length(data)
+  } else if(ncol(data)==1){ #if data has only one column
+    ret = sum(data>0,na.rm=TRUE)/length(data)
+  }
+  else { #if data has multiple columns
+    ret = sum(apply(data>0,1,any),na.rm=TRUE)/nrow(data)
+  }
+  return(ret)
+}
+
+evalNext = function(nextSet,set,data,measure=measReach){
+  vals = numeric(length(nextSet)) #set up storage for return value
+  for(k in 1:length(nextSet)){ #loop over the options in nextSet
+    if(length(set)==0){         #if no existing options
+      vals[k] = measure(data[,nextSet[k]]) 
+    } else {                    #if existing options
+      vals[k] = measure(data[,c(set,nextSet[k])])
+    }
+  }
+  vals
+}
+
+
+evalFull = function(fullSet,data,origSet=numeric(0),measure=measReach){
+  curSet = origSet; #the current set of included options
+  remSet = fullSet[!(fullSet%in%origSet)]; #the remaining set of options to consider
+  K = length(remSet)
+  optVals = numeric(K); #create storage for the optimal values (optVals)
+  ordSet = numeric(K); #create storage for ordered set
+  for(i in 1:K){          #loop over the remaining set consider
+    tmpVals = evalNext(remSet,curSet,data,measure); #calculate vector of next evaluations
+    k = which.max(tmpVals) #pick the option that gives max measure, note will pick first case if a tie!
+    optVals[i] = tmpVals[k] #add optimal value
+    ordSet[i] = remSet[k]   #add index of option that creates optimal value
+    curSet = c(curSet,ordSet[i]); #add optimal next option to current set
+    remSet = remSet[-k];          #delete optimal next option from remaining set
+  }
+  #creaets a "TURF object" containing ordSet, optVals, origSet, origVal, measure, and pnames
+  turf = list(ordSet=ordSet,optVals=optVals,origSet=origSet,origVal=measure(data[,origSet]),measure=measure,pnames=colnames(data))
+  class(turf)="TURF" #makes the list into a TURF object so that can call plot.TURF
+  turf  #return turf
+}
+
+#creates ggplot barplot for a turf object
+plot.TURF=function(turf,...){
+  if(class(turf)!="TURF"){
+    cat("Object not a turf.")
+  } else {
+    df = with(turf,data.frame(vals = c(origVal,optVals),titles=paste(0:length(ordSet),c("Original",pnames[ordSet]),sep=":")))
+    #with(turf,barplot(c(origVal,optVals),names.arg=c("Original",pnames[ordSet])))
+    dodge = position_dodge(width=.75); ##to form constant dimensions positioning for all geom's
+    gp = ggplot(df,aes(y=vals,x=titles))
+    gp + geom_bar(position=dodge,stat="identity",col=1,fill=4,width=.75)
+  }
+}
+
+## Running TURF analysis ##
+turf1  = evalFull(c(1:23),df4,c(4,10,15,17,20,22))
+plot(turf1)
+turf2  = evalFull(c(4,10,15,17,20,22,3),df4,c(4,10,15,17,20,22))
+plot(turf2)
+
+############################################################################################################
+## Result Mentioned is Slide page1, not applicable after checking ##########################################
+############################################################################################################
+```
+
+
+
