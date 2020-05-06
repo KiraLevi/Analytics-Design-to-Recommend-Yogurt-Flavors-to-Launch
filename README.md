@@ -1,5 +1,6 @@
 # Analytics-Design-to-Recommend-Yogurt-Flavors-to-Launch
-Conducting analytics to provide input or recommendations to the decision of which flavors to launch next.
+Imagine you are working on the centralized analytics team for a retailer. Your current project is to support decisions related to the set of flavors to launch for the next Greek Yogurt. The VP over this project has requested that you provide information for the decision. The goal of the information is to understand how much customers like each flavor in order to understand which flavors to launch for the private label.
+
 The project has four measurement goals:
 
 1) Describe the percentage of sales of existing flavors in the Greek yogurt category (all brands)
